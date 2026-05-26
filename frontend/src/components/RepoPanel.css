@@ -1,0 +1,163 @@
+.repo-panel {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-section h2 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.manual-input {
+  display: flex;
+  gap: 8px;
+}
+
+.manual-input input {
+  flex: 1;
+  font-size: 0.88rem;
+}
+
+.manual-input button,
+.index-btn {
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.manual-input button:hover:not(:disabled),
+.index-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.repo-list {
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.repo-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.repo-list li.active .repo-item {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.repo-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.repo-name {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+
+.repo-lang {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  background: var(--surface);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.index-btn {
+  padding: 8px 10px;
+  font-size: 0.75rem;
+}
+
+.indexed-list {
+  list-style: none;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.indexed-list li {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+
+.indexed-list li:hover {
+  background: var(--surface-hover);
+}
+
+.indexed-list li.active {
+  background: var(--surface-hover);
+  border-left: 3px solid var(--accent);
+}
+
+.repo-stats {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.filter-bar {
+  padding: 16px 20px;
+  margin-top: auto;
+}
+
+.filter-bar label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.filter-bar select {
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.configured-list {
+  list-style: none;
+  margin-bottom: 8px;
+}
+
+.configured-list li {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  padding: 6px 0;
+  color: var(--text);
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.82rem;
+  padding: 8px 20px 16px;
+}
