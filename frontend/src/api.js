@@ -17,9 +17,7 @@ function parseSseEvents(buffer) {
   const rest = parts.pop() ?? '';
 
   for (const part of parts) {
-    const line = part
-      .split('\n')
-      .find((l) => l.startsWith('data: '));
+    const line = part.split('\n').find((l) => l.startsWith('data: '));
     if (!line) continue;
     try {
       events.push(JSON.parse(line.slice(6)));
@@ -31,6 +29,34 @@ function parseSseEvents(buffer) {
   return { events, rest };
 }
 
+async function consumeSseStream(res, handlers) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const { events, rest } = parseSseEvents(buffer);
+    buffer = rest;
+
+    for (const event of events) {
+      if (event.type === 'sources') handlers.onSources?.(event.sources || []);
+      if (event.type === 'delta') handlers.onDelta?.(event.content || '');
+      if (event.type === 'tool_start') handlers.onToolStart?.(event.tool, event.input || {});
+      if (event.type === 'tool_result') handlers.onToolResult?.(event.tool, event.summary || '');
+      if (event.type === 'error') {
+        const err = new Error(event.error || 'Stream error');
+        handlers.onError?.(err);
+        throw err;
+      }
+      if (event.type === 'done') handlers.onDone?.();
+    }
+  }
+}
+
 export const api = {
   health: () => request('/health'),
   listGithubRepos: () => request('/github/repos'),
@@ -40,48 +66,41 @@ export const api = {
   chat: (question, repo) =>
     request('/chat', { method: 'POST', body: JSON.stringify({ question, repo: repo || undefined }) }),
 
-  async chatStream(question, repo, { onSources, onDelta, onDone, onError }) {
-    let res;
-    try {
-      res = await fetch(`${BASE}/chat/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, repo: repo || undefined }),
-      });
-    } catch (err) {
-      onError?.(err);
-      throw err;
-    }
+  async chatStream(question, repo, handlers) {
+    const res = await fetch(`${BASE}/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, repo: repo || undefined }),
+    });
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       const err = new Error(data.error || `Request failed: ${res.status}`);
-      onError?.(err);
+      handlers.onError?.(err);
       throw err;
     }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    await consumeSseStream(res, handlers);
+  },
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+  async agentStream(question, repo, history, handlers) {
+    const res = await fetch(`${BASE}/agent/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        repo: repo || undefined,
+        history: history || [],
+      }),
+    });
 
-      buffer += decoder.decode(value, { stream: true });
-      const { events, rest } = parseSseEvents(buffer);
-      buffer = rest;
-
-      for (const event of events) {
-        if (event.type === 'sources') onSources?.(event.sources || []);
-        if (event.type === 'delta') onDelta?.(event.content || '');
-        if (event.type === 'error') {
-          const err = new Error(event.error || 'Stream error');
-          onError?.(err);
-          throw err;
-        }
-        if (event.type === 'done') onDone?.();
-      }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const err = new Error(data.error || `Request failed: ${res.status}`);
+      handlers.onError?.(err);
+      throw err;
     }
+
+    await consumeSseStream(res, handlers);
   },
 };

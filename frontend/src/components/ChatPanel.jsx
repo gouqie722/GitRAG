@@ -7,6 +7,7 @@ export default function ChatPanel({ selectedRepo, indexedRepos, isIndexing }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState('agent');
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -22,6 +23,17 @@ export default function ChatPanel({ selectedRepo, indexedRepos, isIndexing }) {
       return next;
     });
   };
+
+  const buildHistory = (currentMessages) =>
+    currentMessages
+      .filter(
+        (m) =>
+          (m.role === 'user' || m.role === 'assistant') &&
+          m.content?.trim() &&
+          !m.streaming
+      )
+      .slice(-10)
+      .map((m) => ({ role: m.role, content: m.content }));
 
   const handleSend = async () => {
     const question = input.trim();
@@ -47,6 +59,8 @@ export default function ChatPanel({ selectedRepo, indexedRepos, isIndexing }) {
       return;
     }
 
+    const history = buildHistory(messages);
+
     setInput('');
     setMessages((prev) => [
       ...prev,
@@ -55,45 +69,72 @@ export default function ChatPanel({ selectedRepo, indexedRepos, isIndexing }) {
         role: 'assistant',
         content: '',
         sources: [],
+        toolSteps: [],
         streaming: true,
-        status: 'retrieving',
+        status: mode === 'agent' ? 'thinking' : 'retrieving',
       },
     ]);
     setLoading(true);
 
+    const handlers = {
+      onToolStart: (tool, inputData) => {
+        updateLastAssistant((msg) => ({
+          ...msg,
+          status: 'tool_running',
+          toolSteps: [
+            ...(msg.toolSteps || []),
+            { tool, input: inputData, status: 'running' },
+          ],
+        }));
+      },
+      onToolResult: (tool, summary) => {
+        updateLastAssistant((msg) => ({
+          ...msg,
+          toolSteps: (msg.toolSteps || []).map((step) =>
+            step.tool === tool && step.status === 'running'
+              ? { ...step, status: 'done', summary }
+              : step
+          ),
+        }));
+      },
+      onSources: (sources) => {
+        updateLastAssistant((msg) => ({
+          ...msg,
+          sources,
+          status: msg.content ? 'streaming' : 'generating',
+        }));
+      },
+      onDelta: (delta) => {
+        updateLastAssistant((msg) => ({
+          ...msg,
+          content: msg.content + delta,
+          status: 'streaming',
+        }));
+      },
+      onDone: () => {
+        updateLastAssistant((msg) => ({
+          ...msg,
+          streaming: false,
+          status: 'done',
+        }));
+        setLoading(false);
+      },
+      onError: () => {
+        updateLastAssistant((msg) => ({
+          ...msg,
+          streaming: false,
+          status: 'error',
+        }));
+        setLoading(false);
+      },
+    };
+
     try {
-      await api.chatStream(question, selectedRepo || undefined, {
-        onSources: (sources) => {
-          updateLastAssistant((msg) => ({
-            ...msg,
-            sources,
-            status: msg.content ? 'streaming' : 'generating',
-          }));
-        },
-        onDelta: (delta) => {
-          updateLastAssistant((msg) => ({
-            ...msg,
-            content: msg.content + delta,
-            status: 'streaming',
-          }));
-        },
-        onDone: () => {
-          updateLastAssistant((msg) => ({
-            ...msg,
-            streaming: false,
-            status: 'done',
-          }));
-          setLoading(false);
-        },
-        onError: () => {
-          updateLastAssistant((msg) => ({
-            ...msg,
-            streaming: false,
-            status: 'error',
-          }));
-          setLoading(false);
-        },
-      });
+      if (mode === 'agent') {
+        await api.agentStream(question, selectedRepo || undefined, history, handlers);
+      } else {
+        await api.chatStream(question, selectedRepo || undefined, handlers);
+      }
     } catch (err) {
       updateLastAssistant((msg) => ({
         ...msg,
@@ -108,27 +149,66 @@ export default function ChatPanel({ selectedRepo, indexedRepos, isIndexing }) {
   const scopeLabel = selectedRepo || '全部已索引项目';
 
   const renderAssistantContent = (msg) => {
+    if (msg.status === 'thinking') {
+      return <span className="typing">Agent 正在思考...</span>;
+    }
     if (msg.status === 'retrieving') {
       return <span className="typing">正在检索相关代码...</span>;
     }
     if (msg.status === 'generating' && !msg.content) {
       return <span className="typing">正在生成回答...</span>;
     }
-    if (msg.content) {
-      return (
-        <>
-          <ReactMarkdown>{msg.content}</ReactMarkdown>
-          {msg.streaming && <span className="stream-cursor" />}
-        </>
-      );
-    }
-    return null;
+
+    return (
+      <>
+        {msg.toolSteps?.length > 0 && (
+          <div className="tool-steps">
+            {msg.toolSteps.map((step, idx) => (
+              <div key={idx} className={`tool-step ${step.status}`}>
+                <span className="tool-name">{step.tool}</span>
+                <span className="tool-detail">
+                  {step.status === 'running'
+                    ? '执行中...'
+                    : step.summary || '完成'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {msg.content ? (
+          <>
+            <ReactMarkdown>{msg.content}</ReactMarkdown>
+            {msg.streaming && <span className="stream-cursor" />}
+          </>
+        ) : msg.status === 'tool_running' ? (
+          <span className="typing">正在调用工具...</span>
+        ) : null}
+      </>
+    );
   };
 
   return (
     <div className="chat-panel">
       <div className="chat-header">
-        <span>问答</span>
+        <div className="chat-header-left">
+          <span>问答</span>
+          <div className="mode-switch">
+            <button
+              className={mode === 'agent' ? 'active' : ''}
+              onClick={() => setMode('agent')}
+              disabled={loading}
+            >
+              Agent
+            </button>
+            <button
+              className={mode === 'rag' ? 'active' : ''}
+              onClick={() => setMode('rag')}
+              disabled={loading}
+            >
+              快速
+            </button>
+          </div>
+        </div>
         <span className="scope">范围: {scopeLabel}</span>
       </div>
 
@@ -143,13 +223,13 @@ export default function ChatPanel({ selectedRepo, indexedRepos, isIndexing }) {
             ) : (
               <>
                 <h3>开始提问</h3>
-                <p>例如：</p>
+                <p>Agent 模式可自动搜索、读文件、多轮追问</p>
                 <ul>
-                  <li onClick={() => setInput('项目的整体架构是怎样的？')}>
-                    项目的整体架构是怎样的？
+                  <li onClick={() => setInput('florist_admin 的登录流程是怎样的？')}>
+                    florist_admin 的登录流程是怎样的？
                   </li>
-                  <li onClick={() => setInput('认证/登录逻辑在哪里实现的？')}>
-                    认证/登录逻辑在哪里实现的？
+                  <li onClick={() => setInput('对比 Player 和 florist_admin 的路由结构')}>
+                    对比 Player 和 florist_admin 的路由结构
                   </li>
                   <li onClick={() => setInput('API 路由有哪些？')}>API 路由有哪些？</li>
                 </ul>
@@ -185,7 +265,7 @@ export default function ChatPanel({ selectedRepo, indexedRepos, isIndexing }) {
       <div className="chat-input">
         <textarea
           rows={2}
-          placeholder="输入你的问题..."
+          placeholder={mode === 'agent' ? 'Agent 模式：可追问、可多步分析...' : '快速模式：单次检索回答...'}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {

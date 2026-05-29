@@ -95,3 +95,8 @@ export async function listUserRepos() {
     updatedAt: r.updated_at,
   }));
 }
+
+export async function readRepoFile(repoStr, filePath) {
+  const { owner, repo } = parseRepo(repoStr);
+  return getFileContent(owner, repo, filePath);
+}

@@ -78,7 +78,9 @@ npm run dev:frontend
 | GET | `/api/github/repos` | 列出当前用户的 GitHub 项目 |
 | GET | `/api/indexed` | 已索引项目列表 |
 | POST | `/api/index` | 索引项目 `{ "repo": "owner/repo" }` |
-| POST | `/api/chat` | 问答 `{ "question": "...", "repo": "owner/repo" }` |
+| POST | `/api/chat` | 问答（非流式） |
+| POST | `/api/chat/stream` | 问答（RAG 流式） |
+| POST | `/api/agent/stream` | Agent 流式问答（LangChain，3 工具 + 多轮） |
 
 ## 项目结构
 

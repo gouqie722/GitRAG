@@ -68,6 +68,11 @@ export const config = {
     chunkOverlap: parseInt(process.env.CHUNK_OVERLAP || '200', 10),
     topK: parseInt(process.env.TOP_K || '8', 10),
   },
+
+  agent: {
+    maxSteps: parseInt(process.env.AGENT_MAX_STEPS || '5', 10),
+    historyLimit: parseInt(process.env.AGENT_HISTORY_LIMIT || '10', 10),
+  },
 };
 
 export const CODE_EXTENSIONS = new Set([

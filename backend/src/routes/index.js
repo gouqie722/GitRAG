@@ -5,6 +5,7 @@ import { listIndexedRepos, getCollectionInfo } from '../services/lancedb.js';
 import { config } from '../config.js';
 import { getEmbeddingInfo } from '../services/embedding.js';
 import { getIndexingState } from '../services/startupIndexer.js';
+import { runAgentStream } from '../services/agent/index.js';
 
 const router = new Router({ prefix: '/api' });
 
@@ -106,6 +107,44 @@ router.post('/chat/stream', async (ctx) => {
   try {
     for await (const event of askQuestionStream(question.trim(), {
       repoFilter: repo || undefined,
+    })) {
+      send(event);
+    }
+    send({ type: 'done' });
+  } catch (err) {
+    send({ type: 'error', error: err.message });
+  } finally {
+    res.end();
+  }
+});
+
+router.post('/agent/stream', async (ctx) => {
+  const { question, repo, history } = ctx.request.body;
+  if (!question?.trim()) {
+    ctx.status = 400;
+    ctx.body = { error: 'question is required' };
+    return;
+  }
+
+  ctx.set({
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  ctx.status = 200;
+  ctx.respond = false;
+
+  const res = ctx.res;
+  const send = (payload) => {
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  try {
+    for await (const event of runAgentStream({
+      question: question.trim(),
+      repo: repo || undefined,
+      history: Array.isArray(history) ? history : [],
     })) {
       send(event);
     }
